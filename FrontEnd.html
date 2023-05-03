@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERC20 OTC Trading</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.6.1/dist/web3.min.js"></script>
+</head>
+<body>
+    <h1>ERC20 OTC Trading</h1>
+
+    <h2>Create Offer</h2>
+    <form id="createOfferForm">
+        <label for="tokenAddress">Token Address:</label>
+        <input type="text" id="tokenAddress" required><br><br>
+        <label for="tokenAmount">Token Amount:</label>
+        <input type="number" id="tokenAmount" min="1" step="any" required><br><br>
+        <label for="etherAmount">ETH Amount:</label>
+        <input type="number" id="etherAmount" min="0.000000000000000001" step="any" required><br><
+<br>
+        <button type="submit">Create Offer</button>
+    </form>
+    <h2>Available Offers</h2>
+<label for="filterTokenAddress">Filter by Token Address:</label>
+<input type="text" id="filterTokenAddress">
+<button id="filterOffersBtn">Filter Offers</button>
+<br><br>
+<div id="offersList"></div>
+
+<script>
+    const web3 = new Web3(Web3.givenProvider || 'ws://localhost:8545');
+    const contractAddress = 'YOUR_CONTRACT_ADDRESS';
+    const abi = JSON.parse('YOUR_CONTRACT_ABI_JSON');
+    const contract = new web3.eth.Contract(abi, contractAddress);
+
+    const createOfferForm = document.getElementById('createOfferForm');
+    const offersList = document.getElementById('offersList');
+    const filterTokenAddressInput = document.getElementById('filterTokenAddress');
+    const filterOffersBtn = document.getElementById('filterOffersBtn');
+
+    async function createOffer(e) {
+        e.preventDefault();
+        const tokenAddress = document.getElementById('tokenAddress').value;
+        const tokenAmount = web3.utils.toWei(document.getElementById('tokenAmount').value);
+        const etherAmount = web3.utils.toWei(document.getElementById('etherAmount').value);
+        const accounts = await web3.eth.getAccounts();
+        const from = accounts[0];
+
+        await contract.methods.createOffer(tokenAddress, tokenAmount, etherAmount).send({ from });
+    }
+
+    async function fulfillOffer(offerId, etherAmount) {
+        const accounts = await web3.eth.getAccounts();
+        const from = accounts[0];
+
+        await contract.methods.fulfillOffer(offerId).send({ from, value: etherAmount });
+    }
+
+    async function loadOffers(tokenAddress = '') {
+        const offersLength = await contract.methods.getOffersLength().call();
+        let offersHtml = '';
+
+        for (let i = 0; i < offersLength; i++) {
+            const offer = await contract.methods.offers(i).call();
+
+            if (offer.isActive && (tokenAddress === '' || tokenAddress === offer.tokenAddress)) {
+                offersHtml += `
+                    <div>
+                        <p>Offer ID: ${i}</p>
+                        <p>Token Address: ${offer.tokenAddress}</p>
+                        <p>Token Amount: ${web3.utils.fromWei(offer.tokenAmount)}</p>
+                        <p>ETH Amount: ${web3.utils.fromWei(offer.etherAmount)}</p>
+                        <p>Seller: ${offer.seller}</p>
+                        <button onclick="fulfillOffer(${i}, ${offer.etherAmount})">Fulfill Offer</button>
+                        <hr>
+                    </div>
+                `;
+            }
+        }
+
+        offersList.innerHTML = offersHtml;
+    }
+
+    createOfferForm.addEventListener('submit', createOffer);
+    filterOffersBtn.addEventListener('click', () => loadOffers(filterTokenAddressInput.value));
+
+    loadOffers();
+</script>
+</body>
+</html>
